@@ -35,20 +35,7 @@ import VideoPlayer from './VideoPlayer';
 import PoseCanvas from './PoseCanvas';
 import Controls from './Controls';
 import { PoseLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
-import { Box, Typography, AppBar, Toolbar, Button } from '@mui/material';
-
-async function getWelcome() {
-  const wresponse = await fetch('/api/py', {
-    method: 'GET',
-  });
-
-  if (!wresponse.ok) {
-    throw new Error('Failed to fetch welcome');
-  }
-
-  const wdata = await wresponse.json();
-  return wdata.message;
-}
+import { Box, Typography, AppBar, Toolbar } from '@mui/material';
 
 async function getToken() {
   const tokenResponse = await fetch('/api/py/token', {
@@ -81,6 +68,7 @@ async function refreshToken() {
   return data.access_token;
 }
 
+/*
 async function fetchModel() {
   const token = await getToken();
   let response;
@@ -117,6 +105,28 @@ async function fetchModel() {
     throw error; // Re-throw the error for further handling
   }
 }
+*/
+
+async function fetchModel() {
+  // En lugar de obtener un token, simplemente accede al modelo directamente
+  const modelUrl = '/models/pose_landmarker_heavy.task';
+
+  try {
+    const response = await fetch(modelUrl, {
+      method: 'GET',
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch the model file');
+    }
+
+    const modelBlob = await response.blob();
+    return URL.createObjectURL(modelBlob);
+  } catch (error) {
+    console.error("Error fetching model:", error);
+    throw error; // Re-throw the error for further handling
+  }
+}
 
 // Main Component Function:
 function HomePage() {
@@ -127,8 +137,6 @@ function HomePage() {
   const [videoDimensions, setVideoDimensions] = useState({ width: 480, height: 360 });
   const [feedback, setFeedback] = useState('');
   const videoRef = useRef(null);
-
-  const [welcome, setWelcome] = useState('')
 
   useEffect(() => {
     let landmarker;
@@ -178,11 +186,6 @@ function HomePage() {
     setSourceSelected(true); // Indicate that a video source has been selected
   };
 
-  const handleWelcome = async () => {
-    const wr = await getWelcome();
-    setWelcome(wr);
-  }
-
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
       <AppBar position="static">
@@ -217,8 +220,6 @@ function HomePage() {
             </Box>
           )}
         </Box>
-        <Button onClick={handleWelcome}>Welcome</Button>
-        <p>{welcome}</p>
       </Box>
     </Box>
   );
