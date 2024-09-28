@@ -35,7 +35,20 @@ import VideoPlayer from './VideoPlayer';
 import PoseCanvas from './PoseCanvas';
 import Controls from './Controls';
 import { PoseLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
-import { Box, Typography, AppBar, Toolbar } from '@mui/material';
+import { Box, Typography, AppBar, Toolbar, Button } from '@mui/material';
+
+async function getWelcome() {
+  const wresponse = await fetch('/api/py', {
+    method: 'GET',
+  });
+
+  if (!wresponse.ok) {
+    throw new Error('Failed to fetch welcome');
+  }
+
+  const wdata = await wresponse.json();
+  return wdata.message;
+}
 
 async function getToken() {
   const tokenResponse = await fetch('/api/py/token', {
@@ -115,6 +128,8 @@ function HomePage() {
   const [feedback, setFeedback] = useState('');
   const videoRef = useRef(null);
 
+  const [welcome, setWelcome] = useState('')
+
   useEffect(() => {
     let landmarker;
     async function loadPoseLandmarker() {
@@ -163,6 +178,11 @@ function HomePage() {
     setSourceSelected(true); // Indicate that a video source has been selected
   };
 
+  const handleWelcome = async () => {
+    const wr = await getWelcome();
+    setWelcome(wr);
+  }
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
       <AppBar position="static">
@@ -197,6 +217,8 @@ function HomePage() {
             </Box>
           )}
         </Box>
+        <Button onClick={handleWelcome}>Welcome</Button>
+        <p>{welcome}</p>
       </Box>
     </Box>
   );
