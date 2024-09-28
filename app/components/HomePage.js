@@ -106,21 +106,128 @@ async function fetchModel() {
   }
 }
 */
-
+/*
 async function fetchModel() {
-  // En lugar de obtener un token, simplemente accede al modelo directamente
-  const modelUrl = '/models/pose_landmarker_heavy.task';
 
   try {
-    const response = await fetch(modelUrl, {
+    const response = await fetch('/api/getModel');
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch the model file 2');
+    }
+
+    const data = await response.json();
+    return data.modelURL;
+  } catch (error) {
+    console.error("Error fetching model:", error);
+    throw error; // Re-throw the error for further handling
+  }
+}
+*/
+/*
+async function fetchModel() {
+  const token = await getToken();
+  const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB
+  let modelBlob = new Blob();
+  let offset = 0;
+  let totalSize = 0;  // Para calcular el tamaño total
+
+  while (true) {
+    let response = await fetch('/api/py/model', {
       method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Range': `bytes=${offset}-${offset + CHUNK_SIZE - 1}`,
+      },
     });
+
+    console.log(`Response status: ${response.status}`); // Log the response status
+
+    if (!response.ok) {
+      if (response.status === 416) {
+        console.warn("El rango solicitado no es satisfactible. No hay más datos para descargar.");
+        break; // Detener la descarga si el rango no es satisfactible
+      }
+      const errorText = await response.text(); // Obtener el mensaje de error de la respuesta
+      console.error("Error al obtener el trozo:", response.statusText, errorText);
+      throw new Error(`Error al obtener el archivo del modelo: ${response.status} - ${errorText}`);
+    }
+
+    if (response.status === 401) {
+      // If token expired, try refreshing it
+      console.log("Token expired, refreshing...");
+      const newToken = await refreshToken();
+
+      response = await fetch('/api/py/model', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${newToken}`,
+          'Range': `bytes=${offset}-${offset + CHUNK_SIZE - 1}`,
+        },
+      });
+    }
+
+    if (response.status === 206) {
+      const chunkBlob = await response.blob();
+      modelBlob = new Blob([modelBlob, chunkBlob]);
+      offset += chunkBlob.size;
+      totalSize += chunkBlob.size;  // Acumular el tamaño total
+
+      // Si el último trozo tiene un tamaño menor que CHUNK_SIZE, hemos llegado al final
+      if (chunkBlob.size < CHUNK_SIZE) {
+        console.log("Último trozo recibido. Finalizando la descarga.");
+        break;
+      }
+    }
+  }
+
+  console.log(`Tamaño total descargado: ${totalSize} bytes`);  // Log del tamaño total
+  return URL.createObjectURL(modelBlob);
+}
+*/
+
+async function fetchModel() {
+  const token = await getToken();
+  let response;
+
+  try {
+    response = await fetch('/api/py/model', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (response.status === 401) {
+      // If token expired, try refreshing it
+      console.log("Token expired, refreshing...");
+      const newToken = await refreshToken();
+
+      response = await fetch('/api/py/model', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${newToken}`,
+        },
+      });
+    }
 
     if (!response.ok) {
       throw new Error('Failed to fetch the model file');
     }
 
-    const modelBlob = await response.blob();
+    // Create a readable stream
+    const reader = response.body.getReader();
+    const chunks = [];
+
+    // Read data in chunks
+    while (true) {
+      const { done, value } = await reader.read(); // Read a chunk
+      if (done) break; // Exit the loop if done
+      chunks.push(value); // Store the chunk read
+    }
+
+    // Concatenate all chunks into a single Blob
+    const modelBlob = new Blob(chunks);
     return URL.createObjectURL(modelBlob);
   } catch (error) {
     console.error("Error fetching model:", error);

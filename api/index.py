@@ -14,8 +14,10 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.responses import StreamingResponse
 from jose import JWTError, jwt
 import os
+import re
 import secrets
 from pydantic import BaseModel
 from typing import List, Dict
@@ -74,7 +76,64 @@ async def authenticate(request: Request, call_next):
 async def root():
     return {"message": "Welcome to the Pose Detection API"}
 
+
+def file_iterator(file_path: str, chunk_size: int = 1024 * 1024):  # 1 MB chunks
+    with open(file_path, mode="rb") as file_like:
+        while chunk := file_like.read(chunk_size):
+            yield chunk
+
+
 @app.get("/api/py/model")
+async def get_model():
+    if not os.path.exists(MODEL_PATH):
+        raise HTTPException(status_code=404, detail="Model file not found")
+    
+    return StreamingResponse(file_iterator(MODEL_PATH), media_type="application/octet-stream")
+
+"""
+async def get_model(request: Request):
+    file_path = MODEL_PATH
+
+    file_size = os.path.getsize(file_path)
+    range_header = request.headers.get('Range', None)
+
+    if not range_header:
+        raise HTTPException(status_code=416, detail="Range Not Satisfiable")
+
+    match = re.match(r'bytes=(\d+)-(\d*)', range_header)
+    if not match:
+        raise HTTPException(status_code=400, detail="Invalid Range Header")
+
+    start = int(match.group(1))
+    end = int(match.group(2)) if match.group(2) else file_size - 1
+
+    if start < 0 or start >= file_size or end < start or end >= file_size:
+        raise HTTPException(status_code=416, detail="Requested Range Not Satisfiable")
+
+    async def read_file():
+        async with open(file_path, 'rb') as f:
+            await f.seek(start)
+            remaining = end - start + 1
+            while remaining > 0:
+                chunk_size = min(8192, remaining)
+                chunk = await f.read(chunk_size)
+                if not chunk:
+                    break
+                yield chunk
+                remaining -= len(chunk)
+
+    headers = {
+        "Content-Range": f"bytes {start}-{end}/{file_size}",
+        "Accept-Ranges": "bytes",
+        "Content-Length": str(end - start + 1),
+    }
+
+    response = StreamingResponse(read_file(), media_type='application/octet-stream', headers=headers)
+    response.status_code = 206
+    return response
+"""
+
+"""
 async def get_model():
     # Make sure the path to the model is consistent with your static directory
     if not os.path.exists(MODEL_PATH):
@@ -84,6 +143,7 @@ async def get_model():
     # if not os.path.exists(model_path):
     #     raise HTTPException(status_code=404, detail="Model file not found")
     # return FileResponse(model_path)
+"""
 
 @app.post("/api/py/token")
 async def login():
@@ -92,6 +152,7 @@ async def login():
     access_token = create_access_token(data={"sub": "user_id"})
     print(f"Generated Token: {access_token}")  # Debugging line
     return {"access_token": access_token, "token_type": "bearer"}
+
 
 @app.post("/api/py/refresh-token")
 async def refresh_token(request: Request):
