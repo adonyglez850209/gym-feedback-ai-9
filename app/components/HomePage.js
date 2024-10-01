@@ -68,7 +68,7 @@ async function refreshToken() {
   const data = await response.json();
   return data.access_token;
 }
-
+/*
 async function fetchModel() {
   const token = await getToken();
   let response;
@@ -105,15 +105,14 @@ async function fetchModel() {
     throw error; // Re-throw the error for further handling
   }
 }
+*/
 
-/*
 async function fetchModel() {
-
   try {
-    const response = await fetch('/api/getModel');
+    const response = await fetch('/api/model-download');
 
     if (!response.ok) {
-      throw new Error('Failed to fetch the model file 2');
+      throw new Error('Failed to fetch the model file');
     }
 
     const data = await response.json();
@@ -123,7 +122,6 @@ async function fetchModel() {
     throw error; // Re-throw the error for further handling
   }
 }
-*/
 
 // Main Component Function:
 function HomePage() {
