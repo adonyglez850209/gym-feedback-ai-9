@@ -106,17 +106,16 @@ async function fetchModel() {
   }
 }
 */
-
 async function fetchModel() {
   try {
-    const response = await fetch('/api/model-download');
+    const response = await fetch("https://0johbjfjmuis96iv.public.blob.vercel-storage.com/pose_landmarker_heavy-RfYx2NuYcOscDqtf2qrlyvoVzOzKGk.task");
 
     if (!response.ok) {
       throw new Error('Failed to fetch the model file');
     }
 
-    const data = await response.json();
-    return data.modelURL;
+    const fileBlob = await response.blob();
+    return URL.createObjectURL(fileBlob)
   } catch (error) {
     console.error("Error fetching model:", error);
     throw error; // Re-throw the error for further handling

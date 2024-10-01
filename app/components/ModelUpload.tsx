@@ -21,7 +21,7 @@ export default function ModelUpload() {
 
                     const newBlob = await upload(file.name, file, {
                         access: 'public',
-                        handleUploadUrl: '/api/model',
+                        handleUploadUrl: '/api/model-upload',
                     });
 
                     setBlob(newBlob);
