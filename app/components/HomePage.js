@@ -35,7 +35,8 @@ import VideoPlayer from './VideoPlayer';
 import PoseCanvas from './PoseCanvas';
 import Controls from './Controls';
 import { PoseLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
-import { Box, Typography, AppBar, Toolbar } from '@mui/material';
+import { Box, Typography, AppBar, Toolbar, Button, Modal } from '@mui/material';
+import ModelUpload from './ModelUpload';
 
 async function getToken() {
   const tokenResponse = await fetch('/api/py/token', {
@@ -68,7 +69,6 @@ async function refreshToken() {
   return data.access_token;
 }
 
-/*
 async function fetchModel() {
   const token = await getToken();
   let response;
@@ -105,7 +105,7 @@ async function fetchModel() {
     throw error; // Re-throw the error for further handling
   }
 }
-*/
+
 /*
 async function fetchModel() {
 
@@ -124,116 +124,6 @@ async function fetchModel() {
   }
 }
 */
-/*
-async function fetchModel() {
-  const token = await getToken();
-  const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB
-  let modelBlob = new Blob();
-  let offset = 0;
-  let totalSize = 0;  // Para calcular el tamaño total
-
-  while (true) {
-    let response = await fetch('/api/py/model', {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Range': `bytes=${offset}-${offset + CHUNK_SIZE - 1}`,
-      },
-    });
-
-    console.log(`Response status: ${response.status}`); // Log the response status
-
-    if (!response.ok) {
-      if (response.status === 416) {
-        console.warn("El rango solicitado no es satisfactible. No hay más datos para descargar.");
-        break; // Detener la descarga si el rango no es satisfactible
-      }
-      const errorText = await response.text(); // Obtener el mensaje de error de la respuesta
-      console.error("Error al obtener el trozo:", response.statusText, errorText);
-      throw new Error(`Error al obtener el archivo del modelo: ${response.status} - ${errorText}`);
-    }
-
-    if (response.status === 401) {
-      // If token expired, try refreshing it
-      console.log("Token expired, refreshing...");
-      const newToken = await refreshToken();
-
-      response = await fetch('/api/py/model', {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${newToken}`,
-          'Range': `bytes=${offset}-${offset + CHUNK_SIZE - 1}`,
-        },
-      });
-    }
-
-    if (response.status === 206) {
-      const chunkBlob = await response.blob();
-      modelBlob = new Blob([modelBlob, chunkBlob]);
-      offset += chunkBlob.size;
-      totalSize += chunkBlob.size;  // Acumular el tamaño total
-
-      // Si el último trozo tiene un tamaño menor que CHUNK_SIZE, hemos llegado al final
-      if (chunkBlob.size < CHUNK_SIZE) {
-        console.log("Último trozo recibido. Finalizando la descarga.");
-        break;
-      }
-    }
-  }
-
-  console.log(`Tamaño total descargado: ${totalSize} bytes`);  // Log del tamaño total
-  return URL.createObjectURL(modelBlob);
-}
-*/
-
-async function fetchModel() {
-  const token = await getToken();
-  let response;
-
-  try {
-    response = await fetch('/api/py/model', {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-    });
-
-    if (response.status === 401) {
-      // If token expired, try refreshing it
-      console.log("Token expired, refreshing...");
-      const newToken = await refreshToken();
-
-      response = await fetch('/api/py/model', {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${newToken}`,
-        },
-      });
-    }
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch the model file');
-    }
-
-    // Create a readable stream
-    const reader = response.body.getReader();
-    const chunks = [];
-
-    // Read data in chunks
-    while (true) {
-      const { done, value } = await reader.read(); // Read a chunk
-      if (done) break; // Exit the loop if done
-      chunks.push(value); // Store the chunk read
-    }
-
-    // Concatenate all chunks into a single Blob
-    const modelBlob = new Blob(chunks);
-    return URL.createObjectURL(modelBlob);
-  } catch (error) {
-    console.error("Error fetching model:", error);
-    throw error; // Re-throw the error for further handling
-  }
-}
 
 // Main Component Function:
 function HomePage() {
@@ -293,42 +183,76 @@ function HomePage() {
     setSourceSelected(true); // Indicate that a video source has been selected
   };
 
+  const [open, setOpen] = useState(false);
+
+  const handleOpen = () => setOpen(true);
+  const handleClose = () => setOpen(false);
+
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
-      <AppBar position="static">
-        <Toolbar>
-          <Typography variant="h6">Demo App</Typography>
-        </Toolbar>
-      </AppBar>
-      <Box sx={{ flexGrow: 1, display: 'flex' }}>
-        <Box sx={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-          {!sourceSelected ? (
-            <Controls setVideoSrc={handleVideoUpload} setUseWebcam={setUseWebcam} onSourceSelect={handleSourceSelect} />
-          ) : (
-            <Box sx={{ display: 'flex', flexDirection: 'row', width: '100%', justifyContent: 'center' }}>
-              <Box sx={{ position: 'relative', marginRight: '20px' }}>
-                <VideoPlayer
-                  videoSrc={videoSrc}
-                  useWebcam={useWebcam}
-                  videoRef={videoRef}
-                  setVideoDimensions={setVideoDimensions}
-                  videoDimensions={videoDimensions}
-                  feedback={feedback}  // Pass feedback to VideoPlayer
-                />
+    <>
+      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+        <AppBar position="static">
+          <Toolbar>
+            <Typography variant="h6" sx={{ flexGrow: 1 }}>
+              Demo App
+            </Typography>
+            <Button color="inherit" onClick={handleOpen}>
+              Upload Model
+            </Button>
+          </Toolbar>
+        </AppBar>
+        <Box sx={{ flexGrow: 1, display: 'flex' }}>
+          <Box sx={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+            {!sourceSelected ? (
+              <Controls setVideoSrc={handleVideoUpload} setUseWebcam={setUseWebcam} onSourceSelect={handleSourceSelect} />
+            ) : (
+              <Box sx={{ display: 'flex', flexDirection: 'row', width: '100%', justifyContent: 'center' }}>
+                <Box sx={{ position: 'relative', marginRight: '20px' }}>
+                  <VideoPlayer
+                    videoSrc={videoSrc}
+                    useWebcam={useWebcam}
+                    videoRef={videoRef}
+                    setVideoDimensions={setVideoDimensions}
+                    videoDimensions={videoDimensions}
+                    feedback={feedback}  // Pass feedback to VideoPlayer
+                  />
+                </Box>
+                <Box sx={{ position: 'relative' }}>
+                  <PoseCanvas
+                    videoRef={videoRef}
+                    poseLandmarker={poseLandmarker}
+                    videoDimensions={videoDimensions}
+                    setFeedback={setFeedback}  // Pass setFeedback to PoseCanvas
+                  />
+                </Box>
               </Box>
-              <Box sx={{ position: 'relative' }}>
-                <PoseCanvas
-                  videoRef={videoRef}
-                  poseLandmarker={poseLandmarker}
-                  videoDimensions={videoDimensions}
-                  setFeedback={setFeedback}  // Pass setFeedback to PoseCanvas
-                />
-              </Box>
-            </Box>
-          )}
+            )}
+          </Box>
         </Box>
       </Box>
-    </Box>
+      <Modal
+        open={open}
+        onClose={handleClose}
+        aria-labelledby="modal-title"
+        aria-describedby="modal-description"
+      >
+        <Box
+          sx={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: 400,
+            bgcolor: 'background.paper',
+            border: '2px solid #000',
+            boxShadow: 24,
+            p: 4,
+          }}
+        >
+          <ModelUpload />
+        </Box>
+      </Modal>
+    </>
   );
 }
 
