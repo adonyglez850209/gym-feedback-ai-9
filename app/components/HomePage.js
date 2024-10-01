@@ -37,6 +37,8 @@ import Controls from './Controls';
 import { PoseLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 import { Box, Typography, AppBar, Toolbar, Button, Modal } from '@mui/material';
 import ModelUpload from './ModelUpload';
+import LinearProgressWithLabel from './LinearProgressWithLabel';
+import Snackbar from '@mui/material/Snackbar';
 
 async function getToken() {
   const tokenResponse = await fetch('/api/py/token', {
@@ -68,7 +70,7 @@ async function refreshToken() {
   const data = await response.json();
   return data.access_token;
 }
-/*
+
 async function fetchModel() {
   const token = await getToken();
   let response;
@@ -105,17 +107,37 @@ async function fetchModel() {
     throw error; // Re-throw the error for further handling
   }
 }
-*/
-async function fetchModel() {
+
+async function downloadModel(setProgress) {
+
   try {
-    const response = await fetch("https://0johbjfjmuis96iv.public.blob.vercel-storage.com/pose_landmarker_heavy-RfYx2NuYcOscDqtf2qrlyvoVzOzKGk.task");
+
+    const blobUrl = process.env.NEXT_PUBLIC_PROCESS_BLOB_URL || "";
+    const response = await fetch(blobUrl);
 
     if (!response.ok) {
       throw new Error('Failed to fetch the model file');
     }
 
-    const fileBlob = await response.blob();
-    return URL.createObjectURL(fileBlob)
+    const total = Number(response.headers.get('Content-Length'));
+    const reader = response.body.getReader();
+    let received = 0;
+    const chunks = [];
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      received += value.length;
+
+      // Calcula y actualiza el progreso
+      const progress = (received / total) * 100;
+      setProgress(progress);
+    }
+
+    // Crea el blob a partir de los chunks
+    const fileBlob = new Blob(chunks);
+    return URL.createObjectURL(fileBlob);
   } catch (error) {
     console.error("Error fetching model:", error);
     throw error; // Re-throw the error for further handling
@@ -139,17 +161,24 @@ function HomePage() {
         'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm'
       );
 
-      const modelURL = await fetchModel();
+      setLoaded(false);
+      const modelURL = await downloadModel(setProgress);
 
-      landmarker = await PoseLandmarker.createFromOptions(vision, {
-        baseOptions: {
-          modelAssetPath: modelURL,
-          delegate: 'GPU',
-        },
-        runningMode: 'VIDEO',
-        numPoses: 1,
-      });
-      setPoseLandmarker(landmarker);
+      try {
+        landmarker = await PoseLandmarker.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath: modelURL,
+            delegate: 'GPU',
+          },
+          runningMode: 'VIDEO',
+          numPoses: 1,
+        });
+        setPoseLandmarker(landmarker);
+        setLoaded(true);
+      } catch (error) {
+        setOpensnackbar(true)
+        setSourceSelected(false);
+      }
     }
 
     if (sourceSelected) {
@@ -180,10 +209,16 @@ function HomePage() {
     setSourceSelected(true); // Indicate that a video source has been selected
   };
 
-  const [open, setOpen] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [progress, setProgress] = useState(0);
 
-  const handleOpen = () => setOpen(true);
-  const handleClose = () => setOpen(false);
+  const [opensnackbar, setOpensnackbar] = useState(false);
+  const handleCloseSnackbar = (event, reason) => {
+    if (reason === 'clickaway') {
+      return;
+    }
+    setOpensnackbar(false);
+  };
 
   return (
     <>
@@ -193,9 +228,6 @@ function HomePage() {
             <Typography variant="h6" sx={{ flexGrow: 1 }}>
               Demo App
             </Typography>
-            <Button color="inherit" onClick={handleOpen}>
-              Upload Model
-            </Button>
           </Toolbar>
         </AppBar>
         <Box sx={{ flexGrow: 1, display: 'flex' }}>
@@ -203,52 +235,51 @@ function HomePage() {
             {!sourceSelected ? (
               <Controls setVideoSrc={handleVideoUpload} setUseWebcam={setUseWebcam} onSourceSelect={handleSourceSelect} />
             ) : (
-              <Box sx={{ display: 'flex', flexDirection: 'row', width: '100%', justifyContent: 'center' }}>
-                <Box sx={{ position: 'relative', marginRight: '20px' }}>
-                  <VideoPlayer
-                    videoSrc={videoSrc}
-                    useWebcam={useWebcam}
-                    videoRef={videoRef}
-                    setVideoDimensions={setVideoDimensions}
-                    videoDimensions={videoDimensions}
-                    feedback={feedback}  // Pass feedback to VideoPlayer
-                  />
+              loaded ? (
+                <Box sx={{ display: 'flex', flexDirection: 'row', width: '100%', justifyContent: 'center' }}>
+                  <Box sx={{ position: 'relative', marginRight: '20px' }}>
+                    <VideoPlayer
+                      videoSrc={videoSrc}
+                      useWebcam={useWebcam}
+                      videoRef={videoRef}
+                      setVideoDimensions={setVideoDimensions}
+                      videoDimensions={videoDimensions}
+                      feedback={feedback}  // Pass feedback to VideoPlayer
+                    />
+                  </Box>
+                  <Box sx={{ position: 'relative' }}>
+                    <PoseCanvas
+                      videoRef={videoRef}
+                      poseLandmarker={poseLandmarker}
+                      videoDimensions={videoDimensions}
+                      setFeedback={setFeedback}  // Pass setFeedback to PoseCanvas
+                    />
+                  </Box>
                 </Box>
-                <Box sx={{ position: 'relative' }}>
-                  <PoseCanvas
-                    videoRef={videoRef}
-                    poseLandmarker={poseLandmarker}
-                    videoDimensions={videoDimensions}
-                    setFeedback={setFeedback}  // Pass setFeedback to PoseCanvas
-                  />
-                </Box>
-              </Box>
+              ) : (
+                <>
+                  {progress > 0 && progress < 100 ? (
+                    <>
+                      <p>Downloading model to process poses ... </p>
+                      <LinearProgressWithLabel value={progress} />
+                    </>
+                  ) : progress == 100 ? (
+                    <p>Downloaded model</p>
+                  ) : (
+                    <p>Getting started</p>
+                  )}
+                </>
+              )
             )}
           </Box>
         </Box>
       </Box>
-      <Modal
-        open={open}
-        onClose={handleClose}
-        aria-labelledby="modal-title"
-        aria-describedby="modal-description"
-      >
-        <Box
-          sx={{
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-            width: 400,
-            bgcolor: 'background.paper',
-            border: '2px solid #000',
-            boxShadow: 24,
-            p: 4,
-          }}
-        >
-          <ModelUpload />
-        </Box>
-      </Modal>
+      <Snackbar
+        open={opensnackbar}
+        autoHideDuration={3000}
+        onClose={handleCloseSnackbar}
+        message="Failed to download model"
+      />
     </>
   );
 }
